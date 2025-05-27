@@ -1,28 +1,43 @@
 #include <iostream>
-#include <fcntl.h>
-#include <cstdlib>
-#include <sys/mman.h>
-#include <cerrno>
-#include <sys/stat.h>
-#include "bank.hpp"
+#include <string>
 #include <unistd.h>
+#include <arpa/inet.h>
 
-int main(int argc, char* argv[]) {
-    const char* shm_path = "membank";
-    int fd = shm_open(shm_path,O_RDWR,0600);
-    struct stat sb;
+int main() {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    sockaddr_in server{};
+    server.sin_family = AF_INET;
+    server.sin_port = htons(8888);
+    inet_pton(AF_INET, "127.0.0.1", &server.sin_addr);
 
-    if (fstat(fd, &sb) == -1) {
-        perror("fstat");
-        exit(EXIT_FAILURE);
-    }
-    size_t shm_size =sb.st_size;
-    
-    void* ptr = mmap(nullptr, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (ptr == MAP_FAILED) {
-        exit(EXIT_FAILURE);
+    if (connect(sock, (sockaddr*)&server, sizeof(server)) < 0) {
+        perror("connect");
+        return 1;
     }
 
-    munmap(ptr, shm_size);
-    close(fd);
+    std::cout << "Connected to server.\n"
+              << "Available commands:\n"
+              << "  deposit <id> <amount>\n"
+              << "  withdraw <id> <amount>\n"
+              << "  balance <id>\n"
+              << "  exit\n";
+
+    std::string line;
+    char buffer[1024];
+
+    while (true) {
+        std::cout << "> ";
+        std::getline(std::cin, line);
+        if (line == "exit") break;
+
+        send(sock, line.c_str(), line.size(), 0);
+        ssize_t bytes = recv(sock, buffer, sizeof(buffer)-1, 0);
+        if (bytes <= 0) break;
+        buffer[bytes] = '\0';
+        std::cout << "Server: " << buffer;
+    }
+
+    close(sock);
+    return 0;
 }
+
